@@ -1,7 +1,10 @@
 package util
 
 import (
+	"bytes"
+	"encoding/base64"
 	"image"
+	"image/png"
 	"os"
 	"strconv"
 
@@ -29,23 +32,26 @@ func GetConfig() (*Config, error) {
 	if err != nil {
 		return nil, errors.New("Unable to open file specified with CERTIFICATE_FILENAME environment variable.")
 	}
-	certificate, format, err := image.Decode(file)
+	certificate, _, err := image.Decode(file)
 	if err != nil {
 		return nil, errors.New("Unable to decode file specified with CERTIFICATE_FILENAME environment variable.")
 	}
 
+	buf := new(bytes.Buffer)
+	png.Encode(buf, certificate)
+
+	imgBase64Str := base64.StdEncoding.EncodeToString(buf.Bytes())
+
 	return &Config{
-		Port:                   port,
-		Development:            development,
-		CertificateImage:       certificate,
-		CertificateImageFormat: format,
+		Port:             port,
+		Development:      development,
+		CertificateImage: imgBase64Str,
 	}, nil
 }
 
 // Config is the struct that holds all of the config values for connecting to a database
 type Config struct {
-	Port                   int
-	Development            bool
-	CertificateImage       image.Image
-	CertificateImageFormat string
+	Port             int
+	Development      bool
+	CertificateImage string
 }

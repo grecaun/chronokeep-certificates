@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"bytes"
 	"chronokeep/certificates/types"
-	"image/png"
 	"net/http"
 	"net/url"
 
@@ -52,8 +50,5 @@ func (h Handler) GetCertificate(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	buf := new(bytes.Buffer)
-	png.Encode(buf, img)
-
-	return c.Blob(http.StatusOK, "image/png", buf.Bytes())
+	return c.Blob(http.StatusOK, "image/png", img)
 }

@@ -2,11 +2,11 @@ package types
 
 import (
 	"chronokeep/certificates/util"
-	"image"
-	"image/draw"
-	"os"
+	"context"
+	"fmt"
 
-	"github.com/golang/freetype"
+	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/chromedp"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -27,97 +27,55 @@ type (
 	}
 )
 
-func (c Certificate) GenerateCertificate(config *util.Config) (*image.RGBA, error) {
-	certImg := config.CertificateImage
-	bgImg := image.NewRGBA(image.Rect(0, 0, certImg.Bounds().Dx(), certImg.Bounds().Dy()))
-	draw.Draw(bgImg, certImg.Bounds(), certImg, image.Point{}, draw.Src)
-	// add labels
-	bgImg, err := addLabels(bgImg, []Label{
-		{
-			Text:     c.Name,
-			FontPath: "",
-			FontType: "luxirb.ttf",
-			Size:     48,
-			YPos:     300,
-		},
-		{
-			Text:     "finished the",
-			FontPath: "",
-			FontType: "luxirr.ttf",
-			Size:     24,
-			YPos:     360,
-		},
-		{
-			Text:     c.Event,
-			FontPath: "",
-			FontType: "luxirr.ttf",
-			Size:     36,
-			YPos:     390,
-		},
-		{
-			Text:     "with a time of",
-			FontPath: "",
-			FontType: "luxirr.ttf",
-			Size:     24,
-			YPos:     440,
-		},
-		{
-			Text:     c.Time,
-			FontPath: "",
-			FontType: "luxirb.ttf",
-			Size:     48,
-			YPos:     480,
-		},
-		{
-			Text:     "on this day of",
-			FontPath: "",
-			FontType: "luxirr.ttf",
-			Size:     24,
-			YPos:     530,
-		},
-		{
-			Text:     c.Date,
-			FontPath: "",
-			FontType: "luxirr.ttf",
-			Size:     36,
-			YPos:     560,
-		},
-	})
-	if err != nil {
+func (c Certificate) GenerateCertificate(config *util.Config) ([]byte, error) {
+	log.WithFields(log.Fields{
+		"name":  c.Name,
+		"event": c.Event,
+		"time":  c.Time,
+		"date":  c.Date,
+	}).Debug("Creating certificate.")
+	ctx, cancel := chromedp.NewContext(context.Background())
+	defer cancel()
+	var buf []byte
+	if err := chromedp.Run(
+		ctx,
+		chromedp.Tasks{
+			chromedp.Navigate("about:blank"),
+			chromedp.ActionFunc(
+				func(ctx context.Context) error {
+					frameTree, err := page.GetFrameTree().Do(ctx)
+					if err != nil {
+						return err
+					}
+					return page.SetDocumentContent(frameTree.Frame.ID, GetCertificateHTML(c.Name, c.Event, c.Time, c.Date, config.CertificateImage)).Do(ctx)
+				},
+			),
+			chromedp.FullScreenshot(&buf, 90),
+		}); err != nil {
 		return nil, err
 	}
-	return bgImg, nil
+	return buf, nil
 }
 
-func addLabels(bgImg *image.RGBA, labels []Label) (*image.RGBA, error) {
-	c := freetype.NewContext()
-	c.SetDPI(72)
-	c.SetClip(bgImg.Bounds())
-	c.SetDst(bgImg)
-	c.SetSrc(image.Black)
-
-	for _, label := range labels {
-		fontBytes, err := os.ReadFile(label.FontPath + label.FontType)
-		if err != nil {
-			return nil, err
-		}
-		f, err := freetype.ParseFont(fontBytes)
-		if err != nil {
-			return nil, err
-		}
-		c.SetFont(f)
-		c.SetFontSize(label.Size)
-
-		// positioning
-		pt := freetype.Pt(10, label.YPos+int(c.PointToFixed(label.Size)>>6))
-
-		// draw label
-		_, err = c.DrawString(label.Text, pt)
-		if err != nil {
-			log.Println(err)
-			return bgImg, nil
-		}
-		pt.Y += c.PointToFixed(label.Size * 1.5)
-	}
-	return bgImg, nil
+func GetCertificateHTML(name string, event string, time string, date string, certImg string) string {
+	return fmt.Sprintf(
+		"<html>"+
+			"<head></head>"+
+			"<body style='width:800;height:565;padding:0px;background-image:url(\"data:image/png;base64,%s\");background-size:cover;'>"+
+			"<div style='margin:0px;width:800px;height:565px;position:relative;'>"+
+			"<div style='width:100%%;margin:0;position:absolute;top:50%%;-ms-transform:translateY(-50%%);transform:translateY(-50%%);'>"+
+			"<div style='font-size:60px;text-align:center;font-weight:bold;'>%s</div>"+
+			"<div style='font-size:30px;text-align:center;margin-left:100px;width:600px;'>finished the %s with a time of</div>"+
+			"<div style='font-size:60px;text-align:center;font-weight:bold;'>%s</div>"+
+			"<div style='font-size:30px;text-align:center;'>on this day of %s</div>"+
+			"</div>"+
+			"</div>"+
+			"</body>"+
+			"</html>",
+		certImg,
+		name,
+		event,
+		time,
+		date,
+	)
 }
