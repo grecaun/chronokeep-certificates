@@ -13,5 +13,5 @@ type Handler struct {
 
 func (h Handler) Bind(group *echo.Group) {
 	// Certificate image
-	group.GET("/certificate/:name/:event/:time/:date", h.GetCertificate)
+	group.GET("/:name/:event/:time/:date", h.GetCertificate)
 }
